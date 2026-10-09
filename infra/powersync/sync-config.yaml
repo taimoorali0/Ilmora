@@ -1,0 +1,102 @@
+# What each device downloads (docs/decisions.md D7).
+# auth.user_id() = JWT "sub" = users.id. A user only ever receives their own school's rows.
+#
+# STATUS: first draft for the PowerSync spike. Each stream below must be checked
+# against the real service (supported subqueries, nesting depth, bucket counts).
+# See docs/powersync-spike.md, test S4.
+config:
+  edition: 3
+
+streams:
+  # ---------- Everyone ----------
+  my_school:
+    auto_subscribe: true
+    query: SELECT * FROM schools WHERE id IN (SELECT school_id FROM users WHERE id = auth.user_id())
+
+  my_branches:
+    auto_subscribe: true
+    query: SELECT * FROM branches WHERE school_id IN (SELECT school_id FROM users WHERE id = auth.user_id())
+
+  my_roles:
+    auto_subscribe: true
+    query: SELECT * FROM user_roles WHERE user_id = auth.user_id()
+
+  # ---------- Owner: whole school ----------
+  owner_students:
+    auto_subscribe: true
+    query: >-
+      SELECT * FROM students WHERE school_id IN
+      (SELECT school_id FROM user_roles WHERE user_id = auth.user_id() AND role = 'owner')
+
+  owner_families:
+    auto_subscribe: true
+    query: >-
+      SELECT * FROM families WHERE school_id IN
+      (SELECT school_id FROM user_roles WHERE user_id = auth.user_id() AND role = 'owner')
+
+  # ---------- Principal / admin / accountant: their branches ----------
+  branch_students:
+    auto_subscribe: true
+    query: >-
+      SELECT * FROM students WHERE branch_id IN
+      (SELECT branch_id FROM user_roles WHERE user_id = auth.user_id()
+       AND role IN ('principal', 'admin', 'accountant'))
+
+  branch_families:
+    auto_subscribe: true
+    query: >-
+      SELECT * FROM families WHERE branch_id IN
+      (SELECT branch_id FROM user_roles WHERE user_id = auth.user_id()
+       AND role IN ('principal', 'admin', 'accountant'))
+
+  branch_invoices:
+    auto_subscribe: true
+    query: >-
+      SELECT * FROM invoices WHERE branch_id IN
+      (SELECT branch_id FROM user_roles WHERE user_id = auth.user_id() AND role IN ('principal', 'accountant'))
+
+  branch_payments:
+    auto_subscribe: true
+    query: >-
+      SELECT * FROM payments WHERE branch_id IN
+      (SELECT branch_id FROM user_roles WHERE user_id = auth.user_id() AND role IN ('principal', 'accountant'))
+
+  # ---------- Teacher: sections they teach ----------
+  # Nested subquery (sections -> enrollments -> students) is the key spike question.
+  teacher_sections:
+    auto_subscribe: true
+    query: >-
+      SELECT * FROM section_subjects WHERE teacher_id IN
+      (SELECT staff_id FROM users WHERE id = auth.user_id())
+
+  teacher_enrollments:
+    auto_subscribe: true
+    query: >-
+      SELECT * FROM enrollments WHERE section_id IN
+      (SELECT section_id FROM section_subjects WHERE teacher_id IN
+        (SELECT staff_id FROM users WHERE id = auth.user_id()))
+
+  teacher_attendance:
+    auto_subscribe: true
+    query: >-
+      SELECT * FROM student_attendance WHERE section_id IN
+      (SELECT section_id FROM section_subjects WHERE teacher_id IN
+        (SELECT staff_id FROM users WHERE id = auth.user_id()))
+
+  # ---------- Parent: own children only ----------
+  parent_children:
+    auto_subscribe: true
+    query: SELECT * FROM students WHERE family_id IN (SELECT family_id FROM users WHERE id = auth.user_id())
+
+  parent_invoices:
+    auto_subscribe: true
+    query: SELECT * FROM invoices WHERE family_id IN (SELECT family_id FROM users WHERE id = auth.user_id())
+
+  # ---------- Staff self-service ----------
+  my_attendance_days:
+    auto_subscribe: true
+    query: SELECT * FROM staff_attendance_days WHERE staff_id IN (SELECT staff_id FROM users WHERE id = auth.user_id())
+
+  my_payslips:
+    auto_subscribe: true
+    query: SELECT * FROM payslips WHERE staff_id IN (SELECT staff_id FROM users WHERE id = auth.user_id())

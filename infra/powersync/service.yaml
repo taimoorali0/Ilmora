@@ -1,0 +1,26 @@
+# PowerSync service config (self-hosted). Dev values; use TLS + asymmetric keys in production.
+replication:
+  connections:
+    - type: postgresql
+      uri: !env PS_SOURCE_DB_URI
+      sslmode: disable
+
+storage:
+  type: postgresql
+  uri: !env PS_STORAGE_DB_URI
+  sslmode: disable
+
+port: 8080
+
+sync_config:
+  path: sync-config.yaml
+
+client_auth:
+  # Must match POWERSYNC_URL in apps/api/.env (the JWT "aud" claim).
+  audience: ['http://localhost:8080']
+  jwks:
+    keys:
+      - kty: oct
+        alg: HS256
+        kid: ilmora-dev
+        k: !env PS_JWT_SECRET

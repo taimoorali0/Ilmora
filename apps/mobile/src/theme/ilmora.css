@@ -1,0 +1,39 @@
+/* Ilmora brand: teal + blue mark, deep navy wordmark */
+:root {
+  --ilm-teal: #07A398;
+  --ilm-blue: #5F7DEF;
+  --ilm-navy: #071A3A;
+
+  --ion-color-primary: #07A398;
+  --ion-color-primary-rgb: 7, 163, 152;
+  --ion-color-primary-contrast: #ffffff;
+  --ion-color-primary-contrast-rgb: 255, 255, 255;
+  --ion-color-primary-shade: #068f86;
+  --ion-color-primary-tint: #20aca2;
+
+  --ion-color-secondary: #5F7DEF;
+  --ion-color-secondary-rgb: 95, 125, 239;
+  --ion-color-secondary-contrast: #ffffff;
+  --ion-color-secondary-contrast-rgb: 255, 255, 255;
+  --ion-color-secondary-shade: #546ed2;
+  --ion-color-secondary-tint: #6f8af1;
+
+  --ion-color-dark: #071A3A;
+  --ion-color-dark-rgb: 7, 26, 58;
+
+  --ion-font-family: 'Lexend', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --ion-background-color: #f5f7fa;
+  --ion-text-color: #071A3A;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ion-background-color: #0b1220;
+    --ion-text-color: #e6ecf3;
+    --ion-item-background: #131c2e;
+    --ion-card-background: #131c2e;
+  }
+}
+
+.ilm-muted { color: var(--ion-color-medium); font-size: 0.875rem; }
+.ilm-badge-offline { --background: #fbefd2; --color: #8a5b0f; }
