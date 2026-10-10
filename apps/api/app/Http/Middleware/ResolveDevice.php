@@ -19,8 +19,14 @@ class ResolveDevice
             ->where('user_id', $request->user()?->id)
             ->first();
 
-        if (! $device) {
+        // The API token is issued per device; it must not be replayed with another device id.
+        $tokenName = $request->user()?->currentAccessToken()?->name;
+        if (! $device || $tokenName !== "device:{$device->id}") {
             return response()->json(['message' => 'Unknown device. Sign in again.'], 401);
+        }
+        $user = $request->user();
+        if ($user->status !== 'active' || in_array($user->school?->status, ['suspended', 'closed', null], true)) {
+            return response()->json(['message' => 'Access blocked. Contact the school admin.', 'wipe' => false], 403);
         }
         if ($device->revoked_at || $device->wipe_on_contact) {
             return response()->json(['message' => 'Device removed.', 'wipe' => true], 410);

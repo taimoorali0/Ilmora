@@ -7,6 +7,9 @@ return [
 
     'offline_access_days' => (int) env('OFFLINE_ACCESS_DAYS', 7),
 
+    // API tokens expire; the app signs in again online after this many days.
+    'token_days' => (int) env('API_TOKEN_DAYS', 30),
+
     'powersync' => [
         'url' => env('POWERSYNC_URL', 'http://localhost:8080'),
         'kid' => env('POWERSYNC_JWT_KID', 'ilmora-dev'),
@@ -65,5 +68,44 @@ return [
         'ledger_entries' => ['mode' => 'server'],
         'staff_attendance_days' => ['mode' => 'server'],
         'payslips' => ['mode' => 'server'],
+    ],
+
+    /*
+     * Columns a device may never set on a given table. Approvals, decisions and
+     * server bookkeeping happen through server endpoints, never through sync upload.
+     */
+    'sync_locked_columns' => [
+        'staff_leaves' => ['status', 'decided_by', 'decided_at'],
+        'attendance_corrections' => ['status', 'decided_by'],
+        'student_discounts' => ['approved_by'],
+        'payments' => ['sync_state', 'received_by'],
+        'reversals' => ['approved_by'],
+    ],
+
+    /*
+     * Foreign-key columns a device may send, and the table each must point into.
+     * Every referenced row must belong to the caller's school. Any other *_id
+     * column in an upload is rejected.
+     */
+    'sync_references' => [
+        'family_id' => 'families',
+        'student_id' => 'students',
+        'staff_id' => 'staff',
+        'section_id' => 'sections',
+        'class_id' => 'classes',
+        'subject_id' => 'subjects',
+        'academic_session_id' => 'academic_sessions',
+        'fee_head_id' => 'fee_heads',
+        'discount_rule_id' => 'discount_rules',
+        'salary_component_id' => 'salary_components',
+        'leave_type_id' => 'leave_types',
+    ],
+
+    // Polymorphic targets for reversals.target_type → table.
+    'reversal_targets' => [
+        'payment' => 'payments',
+        'invoice' => 'invoices',
+        'invoice_line' => 'invoice_lines',
+        'payment_allocation' => 'payment_allocations',
     ],
 ];

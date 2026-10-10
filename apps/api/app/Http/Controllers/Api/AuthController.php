@@ -13,6 +13,9 @@ use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
+    /** bcrypt of a random string; only used to equalise timing for unknown logins. */
+    private const DUMMY_HASH = '$2y$12$AT6dYpUXNzI/ePODPkD/tOdZ.Uy8ORlCisSqwrdzMiYtRScH4L1pu';
+
     /**
      * Login from a phone or browser. Registers (or reuses) the device and returns
      * the API token, offline grant (D6) and a PowerSync token.
@@ -29,22 +32,25 @@ class AuthController extends Controller
         ]);
 
         $schoolId = DB::table('schools')->where('slug', $data['school'])->value('id');
-        $user = User::where('school_id', $schoolId)
+        // School users only: super admins (school_id null) use the admin panel, never the app API.
+        $user = $schoolId ? User::where('school_id', $schoolId)
             ->where(fn ($q) => $q->where('phone', $data['login'])->orWhere('email', $data['login']))
-            ->first();
+            ->first() : null;
 
-        if (! $user || $user->status !== 'active' || ! Hash::check($data['password'], $user->password)) {
+        // Always run one hash check so response time does not reveal whether the login exists.
+        $passwordOk = Hash::check($data['password'], $user->password ?? self::DUMMY_HASH);
+        if (! $user || ! $passwordOk || $user->status !== 'active') {
             throw ValidationException::withMessages(['login' => 'Wrong login or password.']);
         }
-        if ($user->school->status === 'closed') {
-            throw ValidationException::withMessages(['login' => 'This school account is closed.']);
+        if (in_array($user->school->status, ['suspended', 'closed'], true)) {
+            throw ValidationException::withMessages(['login' => 'This school account is not active. Contact Ilmora support.']);
         }
 
         $device = $this->device($user, $data);
         $user->forceFill(['last_login_at' => now()])->save();
 
         return response()->json([
-            'token' => $user->createToken("device:{$device->id}")->plainTextToken,
+            'token' => $user->createToken("device:{$device->id}", ['*'], now()->addDays(config('ilmora.token_days')))->plainTextToken,
             'user' => $this->profile($user),
             'device' => $device->only(['id', 'code', 'offline_valid_until']),
             'powersync' => $powersync->issue($user, $device),

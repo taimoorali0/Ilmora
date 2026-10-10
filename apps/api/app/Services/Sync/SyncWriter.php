@@ -5,8 +5,10 @@ namespace App\Services\Sync;
 use App\Models\Device;
 use App\Models\User;
 use App\Services\Finance\PaymentRecorder;
+use Illuminate\Database\QueryException;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 /**
@@ -21,8 +23,11 @@ use Illuminate\Support\Str;
 final class SyncWriter
 {
     /** Columns a client may never set. */
-    private const SERVER_COLUMNS = ['school_id', 'version', 'created_by', 'updated_by', 'created_at',
+    private const SERVER_COLUMNS = ['id', 'school_id', 'version', 'created_by', 'updated_by', 'created_at',
         'updated_at', 'device_id', 'sync_state'];
+
+    /** @var array<string, string[]> */
+    private array $columns = [];
 
     public function __construct(private readonly PaymentRecorder $payments) {}
 
@@ -31,7 +36,13 @@ final class SyncWriter
     {
         $results = [];
         foreach ($ops as $op) {
-            $results[] = DB::transaction(fn () => $this->applyOne($user, $device, $op));
+            try {
+                $results[] = DB::transaction(fn () => $this->applyOne($user, $device, $op));
+            } catch (QueryException) {
+                // Bad types, missing required fields, etc. Reject this op; keep the rest of the batch.
+                $results[] = ['id' => (string) ($op['id'] ?? ''), 'table' => (string) ($op['table'] ?? ''),
+                    'result' => 'rejected', 'message' => 'Invalid data.'];
+            }
         }
         return $results;
     }
@@ -53,10 +64,11 @@ final class SyncWriter
             return $res('rejected', 'School is not accepting changes (suspended or read-only).');
         }
 
-        $data = array_diff_key((array) ($op['data'] ?? []), array_flip(self::SERVER_COLUMNS));
-        $branchId = $data['branch_id'] ?? DB::table($table)->where('id', $id)->value('branch_id');
-        if (! $user->canDo($rule['ability'], $branchId)) {
-            return $res('rejected', 'Not permitted.');
+        $data = (array) ($op['data'] ?? []);
+        $allowed = array_diff($this->columnsOf($table), self::SERVER_COLUMNS,
+            config("ilmora.sync_locked_columns.$table", []));
+        if ($unknown = array_diff(array_keys($data), $allowed)) {
+            return $res('rejected', 'Column not writable: '.implode(', ', array_slice($unknown, 0, 5)));
         }
 
         $existing = DB::table($table)->where('id', $id)->first();
@@ -64,10 +76,58 @@ final class SyncWriter
             return $res('rejected', 'Not found.'); // never reveal other schools' rows
         }
 
+        // The user must hold the ability in the row's current branch AND in any branch it is moved to.
+        $branches = array_unique(array_filter([$existing->branch_id ?? null, $data['branch_id'] ?? null]));
+        foreach ($branches ?: [null] as $branchId) {
+            if (! $user->canDo($rule['ability'], $branchId)) {
+                return $res('rejected', 'Not permitted.');
+            }
+        }
+        if (isset($data['branch_id']) && ! $this->ownedBySchool('branches', $data['branch_id'], $user->school_id)) {
+            return $res('rejected', 'Not permitted.');
+        }
+        if ($bad = $this->foreignReference($table, $data, $user->school_id)) {
+            return $res('rejected', "Invalid reference: $bad");
+        }
+
         return match ($rule['mode']) {
             'append' => $this->append($user, $device, $table, $id, $data, $existing, $res),
             'mergeable', 'protected' => $this->upsert($user, $device, $rule['mode'], $op, $table, $id, $data, $existing, $res),
         };
+    }
+
+    /** @return string[] */
+    private function columnsOf(string $table): array
+    {
+        return $this->columns[$table] ??= Schema::getColumnListing($table);
+    }
+
+    private function ownedBySchool(string $table, mixed $id, string $schoolId): bool
+    {
+        return is_string($id) && Str::isUuid($id)
+            && DB::table($table)->where('id', $id)->where('school_id', $schoolId)->exists();
+    }
+
+    /** Returns the first reference column that points outside the caller's school, or null. */
+    private function foreignReference(string $table, array $data, string $schoolId): ?string
+    {
+        $refs = config('ilmora.sync_references', []);
+        foreach ($data as $col => $value) {
+            if (! str_ends_with($col, '_id') || $col === 'branch_id' || $value === null) {
+                continue;
+            }
+            if ($table === 'reversals' && $col === 'target_id') {
+                $target = config('ilmora.reversal_targets.'.($data['target_type'] ?? ''));
+                if (! $target || ! $this->ownedBySchool($target, $value, $schoolId)) {
+                    return $col;
+                }
+                continue;
+            }
+            if (! isset($refs[$col]) || ! $this->ownedBySchool($refs[$col], $value, $schoolId)) {
+                return $col;
+            }
+        }
+        return null;
     }
 
     private function append(User $user, Device $device, string $table, string $id, array $data, ?object $existing, callable $res): array
@@ -79,6 +139,12 @@ final class SyncWriter
             'id' => $id, 'school_id' => $user->school_id, 'created_by' => $user->id,
             'device_id' => $device->id, 'created_at' => now(),
         ];
+        if ($table === 'payments') {
+            $row['received_by'] = $user->id;
+            if (! is_int($row['amount'] ?? null) || $row['amount'] <= 0) {
+                return $res('rejected', 'Payment amount must be a positive whole number (paisa).');
+            }
+        }
         DB::table($table)->insert($row);
         $this->audit($user, $device, 'create', $table, $id, null, $row);
 

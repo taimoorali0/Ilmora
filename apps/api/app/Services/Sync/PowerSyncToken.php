@@ -14,8 +14,8 @@ final class PowerSyncToken
     public function issue(User $user, Device $device): array
     {
         $cfg = config('ilmora.powersync');
-        if (empty($cfg['secret'])) {
-            throw new \RuntimeException('POWERSYNC_JWT_SECRET is not configured.');
+        if (empty($cfg['secret']) || str_starts_with($cfg['secret'], 'change-me') || strlen(self::b64decode($cfg['secret'])) < 32) {
+            throw new \RuntimeException('POWERSYNC_JWT_SECRET is missing, a placeholder, or shorter than 32 bytes.');
         }
         $now = time();
         $exp = $now + 60 * (int) $cfg['ttl_minutes'];
