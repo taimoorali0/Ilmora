@@ -20,6 +20,10 @@
       </div>
 
       <ion-list lines="full" class="menu">
+        <ion-item button router-link="/families" v-if="hasRole('owner', 'principal', 'admin', 'accountant')">
+          <ion-icon :icon="peopleOutline" slot="start" color="primary" />
+          <ion-label>Students &amp; families<p>Admissions, siblings, works offline</p></ion-label>
+        </ion-item>
         <ion-item button router-link="/attendance" v-if="hasRole('teacher', 'principal', 'owner', 'admin')">
           <ion-icon :icon="checkboxOutline" slot="start" color="primary" />
           <ion-label>Student attendance<p>Works offline</p></ion-label>
@@ -42,7 +46,7 @@ import {
   IonButtons, IonCard, IonCardContent, IonContent, IonHeader, IonIcon, IonItem, IonLabel, IonList, IonPage,
   IonTitle, IonToolbar, alertController,
 } from '@ionic/vue';
-import { checkboxOutline, flaskOutline, logOutOutline } from 'ionicons/icons';
+import { checkboxOutline, flaskOutline, logOutOutline, peopleOutline } from 'ionicons/icons';
 import { useQuery } from '@powersync/vue';
 import { computed } from 'vue';
 import SyncBadge from '@/components/SyncBadge.vue';

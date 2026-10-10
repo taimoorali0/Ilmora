@@ -23,13 +23,14 @@ const branches = new Table({ school_id: column.text, name: column.text, code: co
 const user_roles = new Table({ school_id: column.text, user_id: column.text, role: column.text, branch_id: column.text });
 
 const families = new Table({
-  ...syncable, code: column.text, primary_guardian_name: column.text, primary_phone: column.text,
-  whatsapp_phone: column.text, address: column.text,
+  ...syncable, code: column.text, primary_guardian_name: column.text, primary_guardian_cnic: column.text,
+  primary_phone: column.text, whatsapp_phone: column.text, address: column.text,
 }, { indexes: { code: ['code'] } });
 
 const students = new Table({
-  ...syncable, family_id: column.text, admission_no: column.text, name: column.text, gender: column.text,
-  date_of_birth: column.text, admission_date: column.text, status: column.text,
+  ...syncable, family_id: column.text, admission_no: column.text, name: column.text, b_form: column.text,
+  gender: column.text, date_of_birth: column.text, admission_date: column.text, status: column.text,
+  left_on: column.text, notes: column.text,
 }, { indexes: { family: ['family_id'] } });
 
 const enrollments = new Table({

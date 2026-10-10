@@ -6,6 +6,9 @@ const routes: RouteRecordRaw[] = [
   { path: '/', redirect: '/home' },
   { path: '/login', component: () => import('./views/LoginPage.vue'), meta: { public: true } },
   { path: '/home', component: () => import('./views/HomePage.vue') },
+  { path: '/families', component: () => import('./views/FamiliesPage.vue') },
+  { path: '/families/:id', component: () => import('./views/FamilyPage.vue'), props: true },
+  { path: '/families/:familyId/students/:id', component: () => import('./views/StudentPage.vue'), props: true },
   { path: '/attendance', component: () => import('./views/AttendancePage.vue') },
   { path: '/sync-lab', component: () => import('./views/SyncLabPage.vue') },
 ];
