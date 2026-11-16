@@ -71,7 +71,6 @@ class AdminPanelTest extends TestCase
         $this->assertStringNotContainsString('Strong-pass-123', (string) $log->after);
 
         // The new owner can sign in to the app with the school code.
-        config(['ilmora.powersync.secret' => rtrim(strtr(base64_encode(random_bytes(32)), '+/', '-_'), '=')]);
         $this->postJson('/api/v1/auth/login', ['login' => '03111234567', 'password' => 'Strong-pass-123',
             'school' => 'city-grammar', 'platform' => 'web'])->assertOk();
     }

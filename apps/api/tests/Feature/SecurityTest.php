@@ -18,7 +18,6 @@ class SecurityTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        config(['ilmora.powersync.secret' => rtrim(strtr(base64_encode(random_bytes(32)), '+/', '-_'), '=')]);
         $this->seed(DatabaseSeeder::class);
     }
 

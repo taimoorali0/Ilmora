@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 /**
- * Applies a batch of client CRUD operations uploaded by PowerSync
+ * Applies a batch of client CRUD operations uploaded by a device
  * (docs/decisions.md D2, D3, D7).
  *
  * Each op: {op: PUT|PATCH|DELETE, table, id, data, base_version?}
@@ -65,6 +65,13 @@ final class SyncWriter
         }
 
         $data = (array) ($op['data'] ?? []);
+        foreach ($data as $col => $value) {
+            if (is_array($value)) {
+                $data[$col] = json_encode($value); // JSON columns (weekly_offs, months, config)
+            } elseif (is_string($value) && preg_match('/^\d{4}-\d\d-\d\dT\d\d:\d\d/', $value)) {
+                $data[$col] = \Illuminate\Support\Carbon::parse($value)->utc()->format('Y-m-d H:i:s'); // device ISO time → UTC timestamp
+            }
+        }
         $allowed = array_diff($this->columnsOf($table), self::SERVER_COLUMNS,
             config("ilmora.sync_locked_columns.$table", []));
         if ($unknown = array_diff(array_keys($data), $allowed)) {
@@ -79,7 +86,11 @@ final class SyncWriter
         // The user must hold the ability in the row's current branch AND in any branch it is moved to.
         $branches = array_unique(array_filter([$existing->branch_id ?? null, $data['branch_id'] ?? null]));
         foreach ($branches ?: [null] as $branchId) {
-            if (! $user->canDo($rule['ability'], $branchId)) {
+            $allowed = false;
+            foreach ((array) $rule['ability'] as $ability) {
+                $allowed = $allowed || $user->canDo($ability, $branchId);
+            }
+            if (! $allowed) {
                 return $res('rejected', 'Not permitted.');
             }
         }

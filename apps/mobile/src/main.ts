@@ -1,6 +1,5 @@
 import { createApp } from 'vue';
-import { IonicVue } from '@ionic/vue';
-import { createPowerSyncPlugin } from '@powersync/vue';
+import * as Ion from '@ionic/vue';
 
 import '@ionic/vue/css/core.css';
 import '@ionic/vue/css/normalize.css';
@@ -12,19 +11,29 @@ import '@ionic/vue/css/display.css';
 import './theme/ilmora.css';
 
 import App from './App.vue';
+import AppModal from './components/AppModal.vue';
+import Letterhead from './components/Letterhead.vue';
+import PageHeader from './components/PageHeader.vue';
 import { router } from './router';
-import { db } from './powersync/db';
-import { loadSession } from './lib/session';
+import { seedDemo } from './lib/demo';
+import { IS_DEMO, loadSession, session } from './lib/session';
+import { loadStore } from './lib/store';
+import { startSync } from './lib/sync';
 
 async function start() {
   await loadSession();
-  await db.init();
+  const hadData = await loadStore();
+  if (IS_DEMO && !hadData) seedDemo();
+  if (session.data && !session.data.user.super) startSync();
 
-  const app = createApp(App)
-    .use(IonicVue)
-    .use(router)
-    .use(createPowerSyncPlugin({ database: db }));
-
+  const app = createApp(App).use(Ion.IonicVue, { mode: 'md' }).use(router);
+  // Ionic components are used on every screen: register them once.
+  for (const [name, component] of Object.entries(Ion)) {
+    if (/^Ion[A-Z]/.test(name) && name !== 'IonicVue' && typeof component === 'object') app.component(name, component as never);
+  }
+  app.component('PageHeader', PageHeader);
+  app.component('AppModal', AppModal);
+  app.component('Letterhead', Letterhead);
   await router.isReady();
   app.mount('#app');
 }

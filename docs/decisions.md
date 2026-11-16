@@ -1,6 +1,6 @@
 # Ilmora – Architecture decisions
 
-Status: accepted for Phase 0 unless marked **To validate**.
+Status: accepted and implemented.
 
 ## Stack
 
@@ -10,7 +10,7 @@ Status: accepted for Phase 0 unless marked **To validate**.
 | Android / iOS | Capacitor | Native packaging |
 | Backend | Laravel REST API | Permissions, fees, payroll, approvals, integrations |
 | Main database | PostgreSQL | Source of truth for records and money |
-| Offline + sync | PowerSync + local SQLite (**To validate**, see `powersync-spike.md`) | Local work, sync through the backend |
+| Offline + sync | Local store on the device + Ilmora's own sync endpoints (D11) | Local work, upload queue, scoped download |
 | Background work | Redis + Laravel queues / scheduler | Reminders, vouchers, payroll drafts, imports |
 | Platform admin | Filament | Super admin, schools, subscriptions, modules |
 | Documents | Local PDF + server copies | Offline slips; finalized copies stored centrally |
@@ -84,3 +84,15 @@ Before computing deductions the engine:
 ## D10. Multi-school SaaS, super admin creates schools
 
 Only the platform super admin (Filament panel) creates schools, their first owner account, plans and module switches. Every tenant table carries `school_id`; policies and sync rules filter by it.
+
+## D11. Ilmora's own sync instead of PowerSync
+
+PowerSync was the first choice, on condition that it passed validation on real Android, iPhone and browser devices. Its Capacitor SDK was still in beta, so the application was not committed to it. The app now syncs through two endpoints of its own, which keeps one code path on web, Android and iOS and needs no extra service to host.
+
+- **On the device** (`apps/mobile/src/lib/store.ts`): every screen reads and writes a local store kept in IndexedDB. Each change is also added to an outbox.
+- **Upload** (`POST /sync/upload`, `App\Services\Sync\SyncWriter`): the outbox is sent in batches. Every row carries the version it was edited from; the server answers per row with applied, merged, conflict or rejected (D2). Retries are safe because rows keep their device-generated UUID (D3).
+- **Download** (`GET /sync/pull?since=`, `App\Services\Sync\Puller`): the server returns only the rows this user may hold (D7) that changed since the device's cursor. Local changes still waiting in the outbox stay on top.
+- **Server-only actions** (D1 Finalize): voucher run, payroll draft, approval and payment, leave decisions, user management and everything in the platform console are API calls, never sync rows.
+- **When**: a few seconds after a local change, every minute, when the device comes online and when the app returns to the foreground. Each cycle also revalidates the offline grant (D6).
+
+Limits to know: deletes are not synced (records are marked left, cancelled or reversed instead), and a device holds its school's data in memory, which suits schools up to a few thousand students per device. Move the store to SQLite if a single device must hold much more.

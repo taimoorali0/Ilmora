@@ -1,10 +1,9 @@
-# Local development stack for Ilmora.
+# Local development services for Ilmora.
 #   docker compose -f infra/docker-compose.yml up -d
-# Then: cd apps/api && php artisan migrate --seed
+# Then: cd apps/api && php artisan migrate --seed --seeder=DemoSeeder
 services:
   postgres:
     image: postgres:16
-    command: ["postgres", "-c", "wal_level=logical", "-c", "max_replication_slots=10", "-c", "max_wal_senders=10"]
     environment:
       POSTGRES_DB: ilmora
       POSTGRES_USER: ilmora
@@ -12,7 +11,6 @@ services:
     ports: ["127.0.0.1:5432:5432"]   # local only; never expose Postgres publicly
     volumes:
       - pg_data:/var/lib/postgresql/data
-      - ./postgres/init:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ilmora -d ilmora"]
       interval: 5s
@@ -20,24 +18,7 @@ services:
 
   redis:
     image: redis:7
-    ports: ["127.0.0.1:6379:6379"]   # local only
-
-  powersync:
-    image: journeyapps/powersync-service:latest   # pin a version tag before production
-    command: ["start", "-r", "unified"]
-    environment:
-      POWERSYNC_CONFIG_PATH: /config/service.yaml
-      PS_SOURCE_DB_URI: postgresql://powersync_role:powersync@postgres:5432/ilmora
-      PS_STORAGE_DB_URI: postgresql://powersync_storage:powersync@postgres:5432/powersync_storage
-      PS_JWT_SECRET: ${POWERSYNC_JWT_SECRET:?Set POWERSYNC_JWT_SECRET (see README)}
-      NODE_OPTIONS: --max-old-space-size=1000
-    volumes:
-      - ./powersync:/config
-    ports: ["127.0.0.1:8080:8080"]
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: unless-stopped
+    ports: ["127.0.0.1:6379:6379"]
 
 volumes:
   pg_data:

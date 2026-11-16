@@ -1,12 +1,20 @@
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
+import { viteSingleFile } from 'vite-plugin-singlefile';
 import { fileURLToPath, URL } from 'node:url';
 
-export default defineConfig({
-  plugins: [vue()],
-  resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
-  // PowerSync ships web workers + WASM; Vite must not pre-bundle it.
-  optimizeDeps: { exclude: ['@powersync/web'] },
-  worker: { format: 'es' },
-  server: { port: 5173 },
+/** The hosted demo is one file: drop the favicon link (it would point outside the file) and name the page. */
+const demoPage = () => ({
+  name: 'ilmora-demo-page',
+  transformIndexHtml: (html: string) => html.replace(/^<!doctype html>/i, '<!DOCTYPE html>').replace(/\s*<link rel="icon"[^>]*>/, '').replace(/<title>[^<]*<\/title>/, '<title>Ilmora demo</title>'),
 });
+
+// `--mode demo` builds the self-contained demo: one HTML file, sample data, no server.
+export default defineConfig(({ mode }) => ({
+  plugins: [vue(), ...(mode === 'demo' ? [viteSingleFile(), demoPage()] : [])],
+  resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
+  base: mode === 'demo' ? './' : '/',
+  publicDir: mode === 'demo' ? false : 'public',
+  build: { outDir: mode === 'demo' ? 'dist-demo' : 'dist', chunkSizeWarningLimit: 4000 },
+  server: { port: 5173 },
+}));

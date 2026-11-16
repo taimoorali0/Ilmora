@@ -4,19 +4,12 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Device;
-use App\Services\Sync\PowerSyncToken;
 use App\Services\Sync\SyncWriter;
 use Illuminate\Http\Request;
 
 class SyncController extends Controller
 {
-    /** Called by the app's PowerSync connector (fetchCredentials). */
-    public function token(Request $request, PowerSyncToken $powersync)
-    {
-        return $powersync->issue($request->user(), $request->attributes->get('device'));
-    }
-
-    /** Called by the app's PowerSync connector (uploadData) with queued local writes. */
+    /** Queued local writes from a device (lib/sync.ts). */
     public function upload(Request $request, SyncWriter $writer)
     {
         $data = $request->validate([

@@ -11,3 +11,4 @@ apps/mobile/android/local.properties
 apps/mobile/ios/App/Pods/
 apps/mobile/android/app/src/main/assets/public/
 apps/mobile/android/app/src/main/assets/capacitor.*.json
+dist-demo/

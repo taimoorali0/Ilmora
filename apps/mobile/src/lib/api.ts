@@ -1,6 +1,6 @@
 import { session } from './session';
 
-export const API_URL: string = import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api/v1';
+export const API_URL: string = import.meta.env?.VITE_API_URL ?? 'http://localhost:8000/api/v1';
 
 export class ApiError extends Error {
   constructor(public status: number, message: string, public body: unknown = null) {
@@ -17,17 +17,17 @@ export async function api<T = unknown>(path: string, init: RequestInit & { json?
     headers.set('Authorization', `Bearer ${session.data.token}`);
     headers.set('X-Device-Id', session.data.device.id);
   }
-
-  const res = await fetch(`${API_URL}${path}`, {
-    ...init,
-    headers,
-    body: init.json !== undefined ? JSON.stringify(init.json) : init.body,
-  });
-
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, { ...init, headers, body: init.json !== undefined ? JSON.stringify(init.json) : init.body });
+  } catch {
+    throw new ApiError(0, 'No connection to the server.');
+  }
   const body = res.status === 204 ? null : await res.json().catch(() => null);
   if (!res.ok) {
-    const message = (body as { message?: string } | null)?.message ?? `Request failed (${res.status})`;
-    throw new ApiError(res.status, message, body);
+    const b = body as { message?: string; errors?: Record<string, string[]> } | null;
+    const first = b?.errors ? Object.values(b.errors)[0]?.[0] : null;
+    throw new ApiError(res.status, first ?? b?.message ?? `Request failed (${res.status})`, body);
   }
   return body as T;
 }

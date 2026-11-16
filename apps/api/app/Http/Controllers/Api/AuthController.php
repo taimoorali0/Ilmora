@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Device;
 use App\Models\User;
-use App\Services\Sync\PowerSyncToken;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -18,9 +17,9 @@ class AuthController extends Controller
 
     /**
      * Login from a phone or browser. Registers (or reuses) the device and returns
-     * the API token, offline grant (D6) and a PowerSync token.
+     * the API token and the offline grant (D6).
      */
-    public function login(Request $request, PowerSyncToken $powersync)
+    public function login(Request $request)
     {
         $data = $request->validate([
             'login' => 'required|string',          // phone or email
@@ -53,7 +52,6 @@ class AuthController extends Controller
             'token' => $user->createToken("device:{$device->id}", ['*'], now()->addDays(config('ilmora.token_days')))->plainTextToken,
             'user' => $this->profile($user),
             'device' => $device->only(['id', 'code', 'offline_valid_until']),
-            'powersync' => $powersync->issue($user, $device),
         ]);
     }
 
@@ -85,7 +83,9 @@ class AuthController extends Controller
 
         return DB::transaction(function () use ($user, $data, $validUntil) {
             // D01, D02... per school; lock to avoid two logins taking the same code.
-            $count = DB::table('devices')->where('school_id', $user->school_id)->lockForUpdate()->count();
+            // Postgres does not allow FOR UPDATE with COUNT, so lock the school row instead.
+            DB::table('schools')->where('id', $user->school_id)->lockForUpdate()->first();
+            $count = DB::table('devices')->where('school_id', $user->school_id)->count();
             return Device::create([
                 'school_id' => $user->school_id,
                 'branch_id' => $user->roles->firstWhere('branch_id', '!=', null)?->branch_id,
@@ -98,14 +98,16 @@ class AuthController extends Controller
             ]);
         });
     }
-
     private function profile(User $user): array
     {
         $user->loadMissing('roles', 'school.branches');
         return [
             'id' => $user->id,
             'name' => $user->name,
-            'school' => $user->school?->only(['id', 'name', 'slug', 'status', 'logo_path']),
+            'phone' => $user->phone,
+            'staff_id' => $user->staff_id,
+            'family_id' => $user->family_id,
+            'school' => $user->school?->only(['id', 'name', 'slug', 'status', 'logo_path', 'phone', 'address']),
             'branches' => $user->school?->branches->map->only(['id', 'name', 'code'])->values(),
             'roles' => $user->roles->map->only(['role', 'branch_id'])->values(),
         ];
